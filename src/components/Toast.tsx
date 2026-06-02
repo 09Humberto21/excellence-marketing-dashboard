@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
 import { CheckCircle, XCircle, Info, X } from 'lucide-react'
-import { cn } from '../lib/utils'
+import { cn, formatApiError } from '../lib/utils'
 
 type ToastType = 'success' | 'error' | 'info'
 
@@ -27,7 +27,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = useCallback((type: ToastType, message: string) => {
     const id = ++_id
-    setToasts(prev => [...prev, { id, type, message }])
+    const safeMessage =
+      typeof message === 'string'
+        ? message
+        : formatApiError({ response: { data: { detail: message } } }, 'Error')
+    setToasts(prev => [...prev, { id, type, message: safeMessage }])
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
   }, [])
 

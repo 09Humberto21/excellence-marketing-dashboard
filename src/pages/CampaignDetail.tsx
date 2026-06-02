@@ -19,7 +19,7 @@ import { Badge } from '../components/Badge'
 import { LoadingScreen, EmptyState } from '../components/Spinner'
 import { useToast } from '../components/Toast'
 import { campaigns, actions, rewards, detectionRules } from '../lib/api'
-import { formatSat, formatDate, truncate, relativeTime } from '../lib/utils'
+import { formatSat, formatDate, truncate, relativeTime, formatApiError } from '../lib/utils'
 import type {
   ActionType,
   CampaignActionCreate,
@@ -57,12 +57,16 @@ export function CampaignDetail() {
     value: '',
   })
 
-  const { data: campaign, isLoading } = useQuery({
+  const { data: campaign, isLoading, isError, error } = useQuery({
     queryKey: ['campaign', id],
     queryFn: () => campaigns.get(id!),
     enabled: !!id,
     retry: 1,
   })
+
+  // #region agent log
+  fetch('http://127.0.0.1:7274/ingest/1f570826-b3ad-457f-aeed-80c82123d2aa',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8a1f42'},body:JSON.stringify({sessionId:'8a1f42',location:'CampaignDetail.tsx:query',message:'campaign query state',data:{routeId:id,isLoading,isError,errorMsg:isError?String((error as Error)?.message??error):null,hasCampaign:!!campaign,campaignKeys:campaign?Object.keys(campaign):[],idField:(campaign as {id?:string})?.id,campaignIdField:(campaign as {campaign_id?:string})?.campaign_id,reward_mode:(campaign as {reward_mode?:unknown})?.reward_mode,funding_mode:(campaign as {funding_mode?:unknown})?.funding_mode,detection_mode:(campaign as {detection_mode?:unknown})?.detection_mode},timestamp:Date.now(),hypothesisId:'A-B'})}).catch(()=>{});
+  // #endregion
 
   const { data: actionList, isLoading: actionsLoading } = useQuery({
     queryKey: ['actions', id],
@@ -116,7 +120,7 @@ export function CampaignDetail() {
       }
       toast('success', `Campaña ${labels[action]}`)
     },
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error')),
   })
 
   const createAction = useMutation({
@@ -127,7 +131,7 @@ export function CampaignDetail() {
       setActionForm({ nostr_pubkey: '', action_type: 'share_event', event_id: '' })
       toast('success', 'Acción registrada')
     },
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error')),
   })
 
   const verifyAction = useMutation({
@@ -136,7 +140,7 @@ export function CampaignDetail() {
       qc.invalidateQueries({ queryKey: ['actions', id] })
       toast('success', 'Acción verificada')
     },
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error')),
   })
 
   const createRule = useMutation({
@@ -147,19 +151,23 @@ export function CampaignDetail() {
       setRuleForm({ rule_type: 'keyword', value: '' })
       toast('success', 'Regla creada')
     },
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error')),
   })
 
   const testNwc = useMutation({
     mutationFn: () => campaigns.testNwc(id!, nwcUri || undefined),
     onSuccess: (data) => toast('success', `NWC ${data.nwc_status} — ${data.methods.length} métodos`),
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error al testear NWC'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error al testear NWC')),
   })
 
   if (isLoading) return <Layout><LoadingScreen /></Layout>
   if (!campaign) return <Layout><p className="text-zinc-500">Campaña no encontrada</p></Layout>
 
   const c = campaign
+
+  // #region agent log
+  fetch('http://127.0.0.1:7274/ingest/1f570826-b3ad-457f-aeed-80c82123d2aa',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8a1f42'},body:JSON.stringify({sessionId:'8a1f42',runId:'post-fix',location:'CampaignDetail.tsx:pre-render',message:'about to render detail',data:{badgeFields:{status:c.status,reward_mode:c.reward_mode,funding_mode:c.funding_mode,detection_mode:c.detection_mode,nwc_status:c.nwc_status},rewardModeType:typeof c.reward_mode,hasId:!!c.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
 
   return (
     <Layout>
@@ -215,9 +223,9 @@ export function CampaignDetail() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
-        <StatCard label="Acciones" value={c.actions_count ?? 0} />
-        <StatCard label="Presupuesto" value={formatSat(c.total_budget_sat)} />
-        <StatCard label="Gastado" value={formatSat(c.total_spent_sat)} accent />
+        <StatCard label="Acciones" value={c.total_actions ?? 0} />
+        <StatCard label="Presupuesto" value={formatSat(c.budget_sat)} />
+        <StatCard label="Gastado" value={formatSat(c.spent_sat)} accent />
         <StatCard label="Reward/acción" value={formatSat(c.reward_per_action_sat)} />
       </div>
 
@@ -247,13 +255,12 @@ export function CampaignDetail() {
                 <h3 className="text-sm font-semibold text-zinc-100">Detalles</h3>
                 {[
                   ['ID', <span className="font-mono text-xs">{c.id}</span>],
-                  ['Empresa', <span className="font-mono text-xs">{c.company_id.slice(0, 12)}…</span>],
+                  ['Empresa', <span className="font-mono text-xs">{c.company_id ? `${c.company_id.slice(0, 12)}…` : '—'}</span>],
                   ['Detección', <Badge value={c.detection_mode} />],
                   ['Creada', formatDate(c.created_at)],
-                  ['Actualizada', formatDate(c.updated_at)],
-                  ['Inicio', formatDate(c.start_date)],
-                  ['Fin', formatDate(c.end_date)],
-                  ['Máx. acciones', c.max_actions ?? '—'],
+                  ['Inicio', formatDate(c.start_at)],
+                  ['Fin', formatDate(c.end_at)],
+                  ['Máx. acciones / usuario', c.max_actions_per_user ?? '—'],
                 ].map(([k, v]) => (
                   <div key={String(k)} className="flex items-center justify-between text-sm">
                     <span className="text-zinc-500 text-xs">{k}</span>
@@ -261,7 +268,7 @@ export function CampaignDetail() {
                   </div>
                 ))}
               </div>
-              {(c.target_keywords?.length || c.comment_templates?.length) ? (
+              {(c.target_keywords?.length || c.comment_template) ? (
                 <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
                   {c.target_keywords?.length ? (
                     <div>
@@ -273,14 +280,10 @@ export function CampaignDetail() {
                       </div>
                     </div>
                   ) : null}
-                  {c.comment_templates?.length ? (
+                  {c.comment_template ? (
                     <div>
-                      <p className="text-xs font-medium text-zinc-400 mb-2">Comment Templates</p>
-                      <div className="space-y-1">
-                        {c.comment_templates.map((t, i) => (
-                          <p key={i} className="text-xs text-zinc-400 bg-zinc-800 rounded-lg px-3 py-2">{t}</p>
-                        ))}
-                      </div>
+                      <p className="text-xs font-medium text-zinc-400 mb-2">Plantilla de comentario</p>
+                      <p className="text-xs text-zinc-400 bg-zinc-800 rounded-lg px-3 py-2">{c.comment_template}</p>
                     </div>
                   ) : null}
                 </div>

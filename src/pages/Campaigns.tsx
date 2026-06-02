@@ -16,8 +16,18 @@ import { Badge } from '../components/Badge'
 import { LoadingScreen, EmptyState } from '../components/Spinner'
 import { useToast } from '../components/Toast'
 import { campaigns, companies } from '../lib/api'
-import { formatSat, formatDate } from '../lib/utils'
+import { formatSat, formatDate, formatApiError } from '../lib/utils'
 import type { CampaignCreate, CampaignOut, CampaignType, DetectionMode, FundingMode, RewardMode } from '../lib/types'
+
+function defaultStartLocal(): string {
+  return new Date().toISOString().slice(0, 16)
+}
+
+function defaultEndLocal(): string {
+  const d = new Date()
+  d.setDate(d.getDate() + 7)
+  return d.toISOString().slice(0, 16)
+}
 
 const EMPTY_FORM: CampaignCreate = {
   name: '',
@@ -27,12 +37,39 @@ const EMPTY_FORM: CampaignCreate = {
   detection_mode: 'keyword',
   reward_mode: 'simulate',
   funding_mode: 'simulated',
-  total_budget_sat: undefined,
-  reward_per_action_sat: undefined,
-  max_actions: undefined,
+  budget_sat: 10_000,
+  reward_per_action_sat: 100,
+  max_actions_per_user: 1,
+  start_at: defaultStartLocal(),
+  end_at: defaultEndLocal(),
   target_keywords: [],
-  comment_templates: [],
+  comment_template: '',
   nwc_uri: '',
+}
+
+function buildCreatePayload(form: CampaignCreate): CampaignCreate {
+  const payload: CampaignCreate = {
+    name: form.name.trim(),
+    description: form.description.trim() || '—',
+    company_id: form.company_id,
+    campaign_type: form.campaign_type,
+    detection_mode: form.detection_mode,
+    reward_mode: form.reward_mode,
+    funding_mode: form.funding_mode,
+    budget_sat: form.budget_sat,
+    reward_per_action_sat: form.reward_per_action_sat,
+    max_actions_per_user: form.max_actions_per_user,
+    start_at: new Date(form.start_at).toISOString(),
+    end_at: new Date(form.end_at).toISOString(),
+  }
+  if (form.campaign_type === 'nostr_promotion') {
+    payload.target_keywords = form.target_keywords
+    payload.comment_template = form.comment_template?.trim()
+  }
+  if (form.reward_mode === 'zap' && form.nwc_uri?.trim()) {
+    payload.nwc_uri = form.nwc_uri.trim()
+  }
+  return payload
 }
 
 function CampaignCard({
@@ -42,8 +79,8 @@ function CampaignCard({
   c: CampaignOut
   onAction: (action: string, id: string) => void
 }) {
-  const spent = c.total_spent_sat ?? 0
-  const budget = c.total_budget_sat ?? 0
+  const spent = c.spent_sat ?? 0
+  const budget = c.budget_sat ?? 0
   const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0
 
   return (
@@ -91,9 +128,9 @@ function CampaignCard({
 
       {/* Stats row */}
       <div className="flex items-center gap-4 text-xs text-zinc-500 mb-3">
-        <span>{c.actions_count ?? 0} acciones</span>
-        {c.reward_per_action_sat && <span>{formatSat(c.reward_per_action_sat)}/acción</span>}
-        {c.max_actions && <span>max {c.max_actions}</span>}
+        <span>{c.total_actions ?? 0} acciones</span>
+        {c.reward_per_action_sat > 0 && <span>{formatSat(c.reward_per_action_sat)}/acción</span>}
+        {c.max_actions_per_user > 0 && <span>max {c.max_actions_per_user}/usuario</span>}
       </div>
 
       {/* Actions */}
@@ -146,7 +183,6 @@ export function Campaigns() {
   const [typeFilter, setTypeFilter] = useState('')
   const [form, setForm] = useState<CampaignCreate>({ ...EMPTY_FORM })
   const [keywordInput, setKeywordInput] = useState('')
-  const [templateInput, setTemplateInput] = useState('')
 
   const { data: companiesList } = useQuery({
     queryKey: ['companies'],
@@ -167,24 +203,14 @@ export function Campaigns() {
   const invalidate = () => qc.invalidateQueries({ queryKey: ['campaigns'] })
 
   const create = useMutation({
-    mutationFn: () => {
-      const body: CampaignCreate = { ...form }
-      if (!body.nwc_uri) delete body.nwc_uri
-      if (!body.description) delete body.description
-      if (!body.total_budget_sat) delete body.total_budget_sat
-      if (!body.reward_per_action_sat) delete body.reward_per_action_sat
-      if (!body.max_actions) delete body.max_actions
-      if (!body.target_keywords?.length) delete body.target_keywords
-      if (!body.comment_templates?.length) delete body.comment_templates
-      return campaigns.create(body)
-    },
+    mutationFn: () => campaigns.create(buildCreatePayload(form)),
     onSuccess: () => {
       invalidate()
       setOpen(false)
-      setForm({ ...EMPTY_FORM })
+      setForm({ ...EMPTY_FORM, start_at: defaultStartLocal(), end_at: defaultEndLocal() })
       toast('success', 'Campaña creada')
     },
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error al crear campaña'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error al crear campaña')),
   })
 
   const lifecycle = useMutation({
@@ -209,7 +235,7 @@ export function Campaigns() {
       }
       toast('success', labels[action])
     },
-    onError: (e: any) => toast('error', e?.response?.data?.detail ?? 'Error'),
+    onError: (e: unknown) => toast('error', formatApiError(e, 'Error')),
   })
 
   const addKeyword = () => {
@@ -218,11 +244,9 @@ export function Campaigns() {
     setKeywordInput('')
   }
 
-  const addTemplate = () => {
-    if (!templateInput.trim()) return
-    setForm(p => ({ ...p, comment_templates: [...(p.comment_templates ?? []), templateInput.trim()] }))
-    setTemplateInput('')
-  }
+  const nostrPromotionValid =
+    form.campaign_type !== 'nostr_promotion' ||
+    ((form.target_keywords?.length ?? 0) > 0 && !!form.comment_template?.trim())
 
   return (
     <Layout>
@@ -333,27 +357,45 @@ export function Campaigns() {
             </Select>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Inicio *"
+              type="datetime-local"
+              value={form.start_at}
+              onChange={e => setForm(p => ({ ...p, start_at: e.target.value }))}
+            />
+            <Input
+              label="Fin *"
+              type="datetime-local"
+              value={form.end_at}
+              onChange={e => setForm(p => ({ ...p, end_at: e.target.value }))}
+            />
+          </div>
+
           <div className="grid grid-cols-3 gap-3">
             <Input
-              label="Presupuesto (sat)"
+              label="Presupuesto (sat) *"
               type="number"
-              value={form.total_budget_sat ?? ''}
-              onChange={e => setForm(p => ({ ...p, total_budget_sat: e.target.value ? +e.target.value : undefined }))}
-              placeholder="100000"
+              min={1000}
+              value={form.budget_sat}
+              onChange={e => setForm(p => ({ ...p, budget_sat: +e.target.value || 1000 }))}
+              placeholder="10000"
             />
             <Input
-              label="Reward por acción (sat)"
+              label="Reward por acción (sat) *"
               type="number"
-              value={form.reward_per_action_sat ?? ''}
-              onChange={e => setForm(p => ({ ...p, reward_per_action_sat: e.target.value ? +e.target.value : undefined }))}
-              placeholder="1000"
-            />
-            <Input
-              label="Máx. acciones"
-              type="number"
-              value={form.max_actions ?? ''}
-              onChange={e => setForm(p => ({ ...p, max_actions: e.target.value ? +e.target.value : undefined }))}
+              min={0}
+              value={form.reward_per_action_sat}
+              onChange={e => setForm(p => ({ ...p, reward_per_action_sat: +e.target.value || 0 }))}
               placeholder="100"
+            />
+            <Input
+              label="Máx. acciones / usuario *"
+              type="number"
+              min={1}
+              value={form.max_actions_per_user}
+              onChange={e => setForm(p => ({ ...p, max_actions_per_user: +e.target.value || 1 }))}
+              placeholder="1"
             />
           </div>
 
@@ -401,42 +443,27 @@ export function Campaigns() {
             </div>
           )}
 
-          {/* Comment templates */}
           {form.campaign_type === 'nostr_promotion' && (
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-400">
-                Comment templates * (requerido para nostr_promotion)
-              </label>
-              <div className="flex gap-2">
-                <Input
-                  value={templateInput}
-                  onChange={e => setTemplateInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addTemplate())}
-                  placeholder="¡Gran post sobre Bitcoin!"
-                />
-                <Btn onClick={addTemplate} variant="outline" size="sm">+ Add</Btn>
-              </div>
-              {(form.comment_templates ?? []).length > 0 && (
-                <div className="flex flex-col gap-1">
-                  {(form.comment_templates ?? []).map((t, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2">
-                      <span className="flex-1 text-xs text-zinc-300">{t}</span>
-                      <button
-                        className="text-zinc-500 hover:text-red-400"
-                        onClick={() => setForm(p => ({ ...p, comment_templates: p.comment_templates?.filter((_, j) => j !== i) }))}
-                      >×</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <Textarea
+              label="Plantilla de comentario * (comment_template)"
+              value={form.comment_template ?? ''}
+              onChange={e => setForm(p => ({ ...p, comment_template: e.target.value }))}
+              placeholder="¡Gracias por participar!"
+              rows={2}
+            />
           )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Btn variant="ghost" onClick={() => setOpen(false)}>Cancelar</Btn>
             <Btn
               variant="primary"
-              disabled={!form.name || !form.company_id || create.isPending}
+              disabled={
+                !form.name ||
+                !form.company_id ||
+                !nostrPromotionValid ||
+                (form.reward_mode === 'zap' && !form.nwc_uri?.trim()) ||
+                create.isPending
+              }
               onClick={() => create.mutate()}
             >
               {create.isPending ? 'Creando…' : 'Crear campaña'}

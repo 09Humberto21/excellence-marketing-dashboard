@@ -56,6 +56,11 @@ interface BadgeProps {
 }
 
 export function Badge({ value, className }: BadgeProps) {
+  // #region agent log
+  if (value == null || typeof value !== 'string') {
+    fetch('http://127.0.0.1:7274/ingest/1f570826-b3ad-457f-aeed-80c82123d2aa',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'8a1f42'},body:JSON.stringify({sessionId:'8a1f42',location:'Badge.tsx:invalid-value',message:'Badge received invalid value',data:{value,valueType:typeof value},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+  }
+  // #endregion
   const cls = variants[value] ?? 'bg-zinc-700/50 text-zinc-300 border-zinc-600'
   const label = labels[value] ?? value.replace(/_/g, ' ')
   return (

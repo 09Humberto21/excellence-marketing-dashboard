@@ -25,43 +25,42 @@ export interface CompanyCreate {
 export interface CampaignOut {
   id: string
   name: string
-  description?: string
-  company_id: string
+  description: string
+  company_id?: string | null
   campaign_type: CampaignType
   detection_mode: DetectionMode
   reward_mode: RewardMode
   funding_mode: FundingMode
   status: CampaignStatus
-  total_budget_sat?: number
-  reward_per_action_sat?: number
-  total_spent_sat?: number
-  actions_count?: number
-  max_actions?: number
+  budget_sat: number
+  spent_sat: number
+  reward_per_action_sat: number
+  max_actions_per_user: number
+  total_actions?: number
   target_keywords?: string[]
-  comment_templates?: string[]
+  comment_template?: string | null
   nwc_status?: NWCStatus
-  start_date?: string
-  end_date?: string
+  start_at: string
+  end_at: string
   created_at: string
-  updated_at?: string
 }
 
 export interface CampaignCreate {
   name: string
-  description?: string
+  description: string
   company_id: string
   campaign_type: CampaignType
   detection_mode: DetectionMode
   reward_mode: RewardMode
   funding_mode: FundingMode
-  total_budget_sat?: number
-  reward_per_action_sat?: number
-  max_actions?: number
+  budget_sat: number
+  reward_per_action_sat: number
+  max_actions_per_user: number
+  start_at: string
+  end_at: string
   target_keywords?: string[]
-  comment_templates?: string[]
+  comment_template?: string
   nwc_uri?: string
-  start_date?: string
-  end_date?: string
 }
 
 export interface CampaignSummary extends CampaignOut {

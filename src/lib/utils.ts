@@ -39,6 +39,23 @@ export const DEFAULT_CONFIG = {
   adminApiKey: '',
 }
 
+/** FastAPI returns `detail` as a string or a validation-error array; always coerce to string for UI. */
+export function formatApiError(error: unknown, fallback = 'Error'): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    const lines = detail.map((item: { msg?: string; loc?: unknown[] }) => {
+      const field = Array.isArray(item.loc) ? item.loc.slice(1).join('.') : ''
+      return field ? `${field}: ${item.msg ?? 'invalid'}` : (item.msg ?? '')
+    })
+    return lines.filter(Boolean).join('; ') || fallback
+  }
+  if (detail != null && typeof detail === 'object' && 'msg' in detail) {
+    return String((detail as { msg: string }).msg)
+  }
+  return fallback
+}
+
 export function getConfig() {
   try {
     const raw = localStorage.getItem('api_config')

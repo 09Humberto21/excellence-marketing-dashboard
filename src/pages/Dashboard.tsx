@@ -42,7 +42,7 @@ function CampaignRow({ c }: { c: CampaignOut }) {
       <div className="flex items-center gap-2 shrink-0 ml-3">
         <Badge value={c.campaign_type} />
         <Badge value={c.reward_mode} />
-        <span className="text-xs text-zinc-400 w-20 text-right">{formatSat(c.total_budget_sat)}</span>
+        <span className="text-xs text-zinc-400 w-20 text-right">{formatSat(c.budget_sat)}</span>
       </div>
     </div>
   )
