@@ -387,35 +387,61 @@ export function CampaignDetail() {
         )}
 
         {tab === 'monitor' && (
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5">
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4">
             {!monitorJob ? (
-              <EmptyState message="Sin job de monitor activo" />
+              <EmptyState message="Sin job de monitor activo. Activa la campaña para crear uno." />
             ) : (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Badge value={monitorJob.status} />
-                  <span className="text-sm text-zinc-100">{monitorJob.status}</span>
-                </div>
-                {[
-                  ['ID', monitorJob.id],
-                  [
-                    'Último scan',
-                    formatDate(monitorJob.last_seen_at ?? monitorJob.updated_at),
-                  ],
-                  ['Eventos en último scan', monitorEventCount(monitorJob.last_cursor)],
-                  ['Última actualización', formatDate(monitorJob.updated_at)],
-                ].map(([k, v]) => (
-                  <div key={String(k)} className="flex justify-between text-sm">
-                    <span className="text-zinc-500">{k}</span>
-                    <span className="text-zinc-200">{String(v)}</span>
+              <>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge value={monitorJob.status} />
+                    <span className="text-sm text-zinc-100">{monitorJob.status}</span>
                   </div>
-                ))}
+                  {[
+                    ['ID', monitorJob.id],
+                    [
+                      'Último scan',
+                      formatDate(monitorJob.last_seen_at ?? monitorJob.updated_at),
+                    ],
+                    ['Eventos en último scan', monitorEventCount(monitorJob.last_cursor)],
+                    ['Última actualización', formatDate(monitorJob.updated_at)],
+                  ].map(([k, v]) => (
+                    <div key={String(k)} className="flex justify-between text-sm">
+                      <span className="text-zinc-500">{k}</span>
+                      <span className="text-zinc-200">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+
                 {monitorJob.last_error && (
-                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
-                    {monitorJob.last_error}
+                  <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 space-y-1">
+                    <p className="text-xs font-medium text-red-300">Error de relay / scan</p>
+                    <p className="text-sm text-red-200/90 break-words">{monitorJob.last_error}</p>
+                    <p className="text-xs text-red-300/70 pt-1">
+                      Revisa conectividad a los relays configurados en NOSTR_RELAYS o target_nostr_relays.
+                    </p>
                   </div>
                 )}
-              </div>
+
+                {monitorJob.status === 'running' && (
+                  <p className="text-xs text-orange-400/90">
+                    Scan en curso… esta vista se actualiza cada 5 s.
+                  </p>
+                )}
+
+                {monitorEventCount(monitorJob.last_cursor) === 0 && monitorJob.status === 'idle' && (
+                  <div className="rounded-lg border border-zinc-700/60 bg-zinc-950/50 p-3 text-xs text-zinc-500 space-y-1">
+                    <p>
+                      0 eventos no significa que el worker no corrió. Los candidatos guardados se listan en la
+                      pestaña <strong className="text-zinc-400">Acciones</strong>.
+                    </p>
+                    <p>
+                      Para probar manualmente: Workers → Scan (publica en Nostr durante el scan) → Procesar
+                      candidatos → Verificar.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

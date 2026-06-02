@@ -147,6 +147,10 @@ export const workers = {
     mkt()
       .post('/internal/workers/scan-active-campaigns', null, { params: { duration_seconds } })
       .then(r => r.data),
+  processCandidates: (campaign_id?: string) =>
+    mkt()
+      .post('/internal/workers/process-pending-candidates', null, { params: { campaign_id } })
+      .then(r => r.data),
   verifyPending: (campaign_id?: string) =>
     mkt()
       .post('/internal/workers/verify-pending-events', null, { params: { campaign_id } })

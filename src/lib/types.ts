@@ -38,6 +38,7 @@ export interface CampaignOut {
   max_actions_per_user: number
   total_actions?: number
   target_keywords?: string[]
+  target_nostr_relays?: string[] | null
   comment_template?: string | null
   nwc_status?: NWCStatus
   start_at: string
