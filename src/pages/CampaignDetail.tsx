@@ -39,6 +39,11 @@ const TAB_LABELS: Record<Tab, string> = {
   nwc: 'NWC',
 }
 
+function monitorEventCount(lastCursor?: string | null): number {
+  const n = Number.parseInt(lastCursor ?? '', 10)
+  return Number.isNaN(n) ? 0 : n
+}
+
 export function CampaignDetail() {
   const { id } = useParams<{ id: string }>()
   const { toast } = useToast()
@@ -94,6 +99,7 @@ export function CampaignDetail() {
     queryFn: () => detectionRules.monitorJob(id!),
     enabled: !!id && tab === 'monitor',
     retry: 1,
+    refetchInterval: tab === 'monitor' ? 5000 : false,
   })
 
   const invalidateAll = () => {
@@ -392,15 +398,23 @@ export function CampaignDetail() {
                 </div>
                 {[
                   ['ID', monitorJob.id],
-                  ['Último scan', formatDate(monitorJob.last_scan_at)],
-                  ['Eventos encontrados', monitorJob.events_found ?? 0],
-                  ['Creado', formatDate(monitorJob.created_at)],
+                  [
+                    'Último scan',
+                    formatDate(monitorJob.last_seen_at ?? monitorJob.updated_at),
+                  ],
+                  ['Eventos en último scan', monitorEventCount(monitorJob.last_cursor)],
+                  ['Última actualización', formatDate(monitorJob.updated_at)],
                 ].map(([k, v]) => (
                   <div key={String(k)} className="flex justify-between text-sm">
                     <span className="text-zinc-500">{k}</span>
                     <span className="text-zinc-200">{String(v)}</span>
                   </div>
                 ))}
+                {monitorJob.last_error && (
+                  <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+                    {monitorJob.last_error}
+                  </div>
+                )}
               </div>
             )}
           </div>

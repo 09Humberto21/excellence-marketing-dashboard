@@ -113,9 +113,10 @@ export interface RelayMonitorJobOut {
   id: string
   campaign_id: string
   status: string
-  last_scan_at?: string
-  events_found?: number
-  created_at: string
+  last_cursor?: string | null
+  last_seen_at?: string | null
+  last_error?: string | null
+  updated_at: string
 }
 
 export interface RewardAttemptOut {
